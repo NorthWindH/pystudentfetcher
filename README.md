@@ -7,17 +7,17 @@ Typical use case
 ================
 
 Directory structure:
-	/
-		Assignment1
-			bob
-				calc.cpp
-				calc.h
-				honesty.txt
-			tracy
-				sup.cpp
-				calc.cpp
-				calc.h
-		workspace
+    /
+    	Assignment1
+    		bob
+    			calc.cpp
+    			calc.h
+    			honesty.txt
+    		tracy
+    			sup.cpp
+    			calc.cpp
+    			calc.h
+    	workspace
 
 After installing pystudentfetcher on the python search path, we can fetch a student's work like this:
 
