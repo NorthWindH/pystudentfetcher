@@ -7,17 +7,17 @@ Typical use case
 ================
 
 Directory structure:
-/
-	Assignment1
-		bob
-			calc.cpp
-			calc.h
-			honesty.txt
-		tracy
-			sup.cpp
-			calc.cpp
-			calc.h
-	workspace
+	/
+		Assignment1
+			bob
+				calc.cpp
+				calc.h
+				honesty.txt
+			tracy
+				sup.cpp
+				calc.cpp
+				calc.h
+		workspace
 
 After installing pystudentfetcher on the python search path, we can fetch a student's work like this:
 
@@ -46,18 +46,18 @@ The system can also deal with "late days". The mechanism for this is incredibly 
 
 For example, given the following directory structure:
 
-/
-	Assignment1
-		late 5
-			bob
+	/
+		Assignment1
+			late 5
+				bob
+					calc.cpp
+					calc.h
+					honesty.txt
+			tracy
+				sup.cpp
 				calc.cpp
 				calc.h
-				honesty.txt
-		tracy
-			sup.cpp
-			calc.cpp
-			calc.h
-	workspace
+		workspace
 
 Now if we do the same command as above:
 cd /workspace
