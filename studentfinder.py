@@ -127,7 +127,12 @@ class StudentFinder:
             basenames = os.listdir(src_dir)
             for basename in basenames:
                 if basename.count(student_key):
-                    match_submissions.append(path.join(src_dir, basename))
+                    do_append = True
+                    sub_path = path.join(src_dir, basename)
+                    if not self.submission_type or \
+                        (self.submission_type == 'files' and path.isfile(sub_path)) or \
+                        (self.submission_type == 'directories' and path.isdir(sub_path)):
+                        match_submissions.append(sub_path)
 
         # Iterate over submissions and behave accordingly
         for submission in match_submissions:
@@ -193,8 +198,25 @@ class StudentFinder:
                         print("File %s contains invalid date values, ignored for late days calculation..." %
                             submission)
 
-            if test_date and (not submission_date or test_date > submission_date):
-                submission_date = test_date
+            if test_date:
+                do_replace = False
+                if not submission_date:
+                    do_replace = True
+                else:
+                    d1 = submission_date
+                    d2 = test_date
+
+                    # Ensure both types can be compared
+                    if type(d1) != type(d2):
+                        if isinstance(d1, datetime.datetime):
+                            d1 = d1.date()
+                        if isinstance(d2, datetime.datetime):
+                            d2 = d2.date()
+                        if d2 > d1:
+                            do_replace = True
+
+                if do_replace:
+                    submission_date = test_date
 
         # If due date, calculate late days
         if self.due:
