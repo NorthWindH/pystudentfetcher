@@ -3,13 +3,20 @@
 import sys
 import shutil
 import os.path as path
+import os
 import argparse
 import re
 import datetime
 import textwrap
 from pystudentfetcher.studentfinder import StudentFinder, MatchError, validate_date, validate_due
 
-if __name__ == "__main__":
+def format_datetime(prefix, d):
+    rv = "%s date: %s" % (prefix, format(d, "%A, %B %d, %Y"))
+    if isinstance(d, datetime.datetime):
+        rv = rv + "\n%s time: %s" % (prefix, format(d, "%I:%M:%S %p"))
+    return rv
+
+def main():
     def validate_business_days(arg):
         arg = arg.lower()
         if re.match(r'.*[^mtwrfsn]', arg):
@@ -17,6 +24,7 @@ if __name__ == "__main__":
         return set(arg)
 
     parser = argparse.ArgumentParser(
+        prog='pystudentfetcher',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="Fetches student files to destination directory.",
         epilog=textwrap.dedent("""\
@@ -78,35 +86,55 @@ if __name__ == "__main__":
         print("Output path is not a valid directory, received %s (abs resolves to %s)" %(
             args.destination, path.abspath(args.destination)
         ))
-        sys.exit(1)
+        return 1
 
     finder = StudentFinder(**vars(args))
     match = finder.match(args.student_key)
-    print(match)
-    exit()
 
-    student_found = chooser.find_student(student_key)
-    if not student_found:
-        print("Could not find student with key %s" % student_key)
-        sys.exit(1)
+    if not match['match_submissions']:
+        print("Found no entry submissions...")
+        return 1
 
-    # Verify existence of all fetch files
-    for fetch_file in args.file:
-        fetch_path = path.join(student_found.path, fetch_file)
-        if not path.isfile(fetch_path):
-            print("Could not find file %s in directory for student: %s, src %s, days late %d" % (
-                fetch_file,
-                path.basename(student_found.path),
-                student_found.src,
-                student_found.days_late))
-            sys.exit(1)
+    print("Found %d entry submissions:" % len(match['match_submissions']))
+    for s in match['match_submissions']:
+        print("    %s" % s)
+    print('')
 
-    # Copy over all fetch files
-    for fetch_file in args.file:
-        fetch_path = path.join(student_found.path, fetch_file)
-        shutil.copy(fetch_path, args.destination)
+    print("Found %d filesystem targets:" % len(match['match_results']))
+    for s in match['match_results']:
+        print("    %s" % s)
+    print('')
 
-    print("Fetch success. Fetched %s, src %s, days late %d" % (
-        path.basename(student_found.path),
-        student_found.src,
-        student_found.days_late))
+    if args.due:
+        print("%s\n" % format_datetime("Due", args.due))
+
+    if 'submission_date' in match:
+        d = match['submission_date']
+        print("%s\n" % format_datetime("Submission", match['submission_date']))
+    else:
+        print("No submission date could be extracted...\n")
+
+    if args.due:
+        l = match['late_days']
+        if l != None:
+            print("Late days (%d):" % len(l))
+            for i, day in enumerate(l):
+                print("%s" % format_datetime("Day %d" % i, day))
+            print('')
+        else:
+            print("Due date present but could not extrace submission date...\n")
+
+    for f in match['match_results']:
+        dest_path = path.join(args.destination, path.basename(f))
+        if path.isdir(f):
+            if path.exists(dest_path):
+                shutil.rmtree(dest_path)
+            shutil.copytree(f, dest_path)
+        else:
+            shutil.copyfile(f, dest_path)
+
+    print("Fetch success.")
+    return 0
+
+if __name__ == "__main__":
+    exit(main())

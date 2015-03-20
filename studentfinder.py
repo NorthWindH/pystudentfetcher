@@ -6,7 +6,6 @@ import re
 import datetime
 import argparse
 
-
 # Note, is_dst=None is used below so ambiguous dst situations result in error
 class MatchError(argparse.ArgumentTypeError):
     def __init__(self, *args, **kwargs):
@@ -120,6 +119,7 @@ class StudentFinder:
     def match(self, student_key):
         match_submissions = list()
         match_results = list()
+        submission_date = None
         late_days = None
 
         # Go over all sources and collect submissions
@@ -170,37 +170,39 @@ class StudentFinder:
             else:
                 match_results.append(submission)
 
-        if self.due:
-            # Calculate late days, find submission date
-            submission_date = None
-            for submission in match_submissions:
-                basename = path.basename(submission)
+        # Find submission date
+        submission_date = None
+        for submission in match_submissions:
+            basename = path.basename(submission)
 
-                test_date = None
+            test_date = None
 
-                m = datetime_pattern.match(basename)
+            m = datetime_pattern.match(basename)
+            if m:
+                try:
+                    test_date = datetime_from_match(m)
+                except ValueError:
+                    print("File %s contains invalid datetime values, ignored for late days calculation..." %
+                        submission)
+            else:
+                m = date_pattern.match(basename)
                 if m:
                     try:
-                        test_date = datetime_from_match(m)
+                        test_date = date_from_match(m)
                     except ValueError:
-                        print("File %s contains invalid datetime format, ignored for late days calculation..." %
+                        print("File %s contains invalid date values, ignored for late days calculation..." %
                             submission)
-                else:
-                    m = date_pattern.match(basename)
-                    if m:
-                        try:
-                            test_date = date_from_match(m)
-                        except ValueError:
-                            print("File %s contains invalid date format, ignored for late days calculation..." %
-                                submission)
 
-                if test_date and (not submission_date or test_date > submission_date):
-                    submission_date = test_date
+            if test_date and (not submission_date or test_date > submission_date):
+                submission_date = test_date
+
+        # If due date, calculate late days
+        if self.due:
 
             # If sub late, walk through calendar to calculate late days...
             late_days = None
             if submission_date:
-                late_days = 0
+                late_days = list()
                 if not meets_deadline(submission_date, self.due):
                     next_day = self.due
                     if isinstance(next_day, datetime.datetime):
@@ -208,7 +210,7 @@ class StudentFinder:
                     day_advance = datetime.timedelta(days=1)
                     while True:
                         # Find next business day date
-                        late_days += 1
+                        late_days.append(next_day)
                         while True:
                             next_day = next_day + day_advance
                             if weekday_idx_to_letter(next_day.weekday()) in self.business_days and \
@@ -220,5 +222,6 @@ class StudentFinder:
         return {
             'match_submissions': match_submissions,
             'match_results': match_results,
-            'late_days': late_days
+            'submission_date': submission_date,
+            'late_days': late_days,
         }
