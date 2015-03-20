@@ -2,57 +2,223 @@ import sys
 import os
 import os.path as path
 import collections
+import re
+import datetime
+import argparse
 
-class FoundStudent:
-    def __init__(self, path_, src, days_late):
-        self.path = path_
-        self.src = src
-        self.days_late = days_late
+
+# Note, is_dst=None is used below so ambiguous dst situations result in error
+class MatchError(argparse.ArgumentTypeError):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+date_pattern_src = r'([0-9]{4})-([0-9]{2})-([0-9]{2})'
+datetime_pattern_src = r'(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})'
+date_pattern = re.compile(".*%s" % date_pattern_src)
+datetime_pattern = re.compile(".*%s" % datetime_pattern_src)
+date_pattern_strict = re.compile("^%s$" % date_pattern_src)
+datetime_pattern_strict = re.compile("^%s$" % datetime_pattern_src)
+
+def date_from_match(m):
+    return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+def datetime_from_match(m):
+    return datetime.datetime(
+                int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                int(m.group(4)), int(m.group(5)), int(m.group(6)))
+
+def validate_date(arg):
+    m = date_pattern_strict.match(arg)
+    if m:
+        try:
+            return date_from_match(m)
+        except ValueError:
+            raise argparse.ArgumentTypeError("Invalid date value %s" % arg)
+
+    raise MatchError("Invalid date %s" % arg)
+
+def validate_datetime(arg):
+    m = datetime_pattern_strict.match(arg)
+    if m:
+        try:
+            return datetime_from_match(m)
+        except ValueError:
+            raise argparse.ArgumentTypeError("Invalid datetime value %s" % arg)
+
+    raise MatchError("Invalid datetime %s" % arg)
+
+def validate_due(arg):
+    try:
+        return validate_date(arg)
+    except MatchError:
+        pass
+
+    try:
+        return validate_datetime(arg)
+    except MatchError:
+        pass
+
+    raise MatchError("Invalid due date %s" % arg)
+
+def meets_deadline(d, deadline):
+    """
+    Returns true if date or datetime d is less than or equal to date or datetime
+    deadline.
+
+    If both are datetimes, the full datetime is compared.
+    If either is a date, only the date components are tested.
+    """
+
+    if isinstance(d, datetime.datetime) and isinstance(deadline, datetime.datetime):
+        return d <= deadline
+
+    if isinstance(d, datetime.datetime):
+        d = d.date()
+
+    if isinstance(deadline, datetime.datetime):
+        deadline = deadline.date()
+
+    return d <= deadline
+
+def weekday_idx_to_letter(idx):
+    return 'mtwrfsn'[idx]
 
 class StudentFinder:
-    def __init__(self, student_dirs):
-        if not isinstance(student_dirs, collections.Iterable):
-            raise Exception("Student dirs not iterable")
-        self.student_dirs = student_dirs
+    def __init__(self,
+        source=list(),
+        submission_type=None,
+        name=list(),
+        name_file=list(),
+        name_directory=list(),
+        pattern=list(),
+        pattern_file=list(),
+        pattern_directory=list(),
+        recursive=False,
+        due=None,
+        holiday=list(),
+        business_days="mtwrf",
+        *args,
+        **kwargs
+    ):
+        self.source = source
+        self.submission_type = submission_type
+        self.name_file = list()
+        self.name_file += name_file
+        self.name_directory = list()
+        self.name_directory += name_directory
+        self.name_file += name
+        self.name_directory += name
+        self.pattern_file = list(pattern_file)
+        self.pattern_directory = list(pattern_directory)
+        self.pattern_file += pattern
+        self.pattern_directory += pattern
+        self.recursive = recursive
+        self.due = due
+        self.holiday = holiday
+        self.business_days = business_days
 
-    def _find_student_dir_helper(self, dir_path, student_key):
-        # Attempt to find the student's key in this directory
-        student_key = student_key.lower()
-        for dir_entry in os.listdir(dir_path):
-            abspath = path.abspath(os.path.join(dir_path, dir_entry))
-            if os.path.isdir(abspath) and dir_entry.lower().count(student_key):
-                return abspath
-        return ""
+    def match(self, student_key):
+        match_submissions = list()
+        match_results = list()
+        late_days = None
 
-    def find_student(self, student_key):
-        for student_dir in self.student_dirs:
-            bn = path.basename(student_dir)
+        # Go over all sources and collect submissions
+        for src_dir in self.source:
+            basenames = os.listdir(src_dir)
+            for basename in basenames:
+                if basename.count(student_key):
+                    match_submissions.append(path.join(src_dir, basename))
 
-            # Try to find student in larger dir first
-            student_found = self._find_student_dir_helper(student_dir, student_key)
+        # Iterate over submissions and behave accordingly
+        for submission in match_submissions:
 
-            # If student found, return path with 0 late days
-            if student_found:
-                return FoundStudent(student_found, bn, 0)
+            # Match directory contents by name and pattern
+            if path.isdir(submission):
 
-            # Try to find student in late dirs
-            for dir_entry in os.listdir(student_dir):
-                dir_entry_path = path.join(student_dir,dir_entry)
-                if not path.isdir(dir_entry_path) or not dir_entry.count('late'):
-                    continue
+                # If no name specs and no patterns, just fetch directory itself
+                if not self.name_file and not self.name_directory and \
+                    not self.pattern_file and not self.pattern_directory:
+                    match_results.append(submission)
 
-                student_found = self._find_student_dir_helper(
-                    dir_entry_path, student_key)
+                # Otherwise, look through contents
+                else:
+                    contents = [path.join(submission, f) for f in os.listdir(submission)]
+                    while conents:
+                        item = contents.pop(0)
 
-                if not student_found:
-                    continue
+                        name_list = self.name_file
+                        pattern_list = self.pattern_file
+                        isdir = path.isdir(item)
+                        if isdir:
+                            name_list = self.name_directory
+                            pattern_list = self.pattern_directory
 
-                # Return found student with late days
-                try:
-                    days_late = int(dir_entry[4:])
-                except:
-                    print("Error while parsing days late: ", sys.exc_info()[0])
-                    raise
-                return FoundStudent(student_found, bn, days_late)
+                        basename = path.basename(item)
+                        if basename in name_list or \
+                            any([p.match(basename) for p in pattern_list]):
+                            match_results.append(item)
+                        elif isdir and self.recursive:
+                            contents.append([path.join(item, f) for f in os.listdir(item)])
 
-        return None
+            # Match file by pattern
+            elif self.pattern_file:
+                basename = path.basename(submission)
+                if any([p.match(basename) for p in self.pattern_file]):
+                    match_results.append(submission)
+
+            # No patterns, just add file to results
+            else:
+                match_results.append(submission)
+
+        if self.due:
+            # Calculate late days, find submission date
+            submission_date = None
+            for submission in match_submissions:
+                basename = path.basename(submission)
+
+                test_date = None
+
+                m = datetime_pattern.match(basename)
+                if m:
+                    try:
+                        test_date = datetime_from_match(m)
+                    except ValueError:
+                        print("File %s contains invalid datetime format, ignored for late days calculation..." %
+                            submission)
+                else:
+                    m = date_pattern.match(basename)
+                    if m:
+                        try:
+                            test_date = date_from_match(m)
+                        except ValueError:
+                            print("File %s contains invalid date format, ignored for late days calculation..." %
+                                submission)
+
+                if test_date and (not submission_date or test_date > submission_date):
+                    submission_date = test_date
+
+            # If sub late, walk through calendar to calculate late days...
+            late_days = None
+            if submission_date:
+                late_days = 0
+                if not meets_deadline(submission_date, self.due):
+                    next_day = self.due
+                    if isinstance(next_day, datetime.datetime):
+                        next_day = next_day.date()
+                    day_advance = datetime.timedelta(days=1)
+                    while True:
+                        # Find next business day date
+                        late_days += 1
+                        while True:
+                            next_day = next_day + day_advance
+                            if weekday_idx_to_letter(next_day.weekday()) in self.business_days and \
+                                not next_day in self.business_days:
+                                break
+                        if meets_deadline(submission_date, next_day):
+                            break
+
+        return {
+            'match_submissions': match_submissions,
+            'match_results': match_results,
+            'late_days': late_days
+        }
