@@ -54,7 +54,7 @@ We could additionally fetch by pattern by using -p.
 For example:
 ```
 cd /
-python3 -m pystudentfetcher -s /Assignment1 -p .\*[.]cpp$ -p .\*[.]h -n honesty.txt -d /workspace b
+python3 -m pystudentfetcher -s /Assignment1 -p .*\\.cpp\$ -p .*\\.h\$ -n honesty.txt -d /workspace b
 ```
 
 In this case, the cpp, h, and txt file will all be fetched. As you can see,
