@@ -108,7 +108,7 @@ def main():
     if args.due:
         print("%s\n" % format_datetime("Due", args.due))
 
-    if 'submission_date' in match:
+    if match['submission_date']:
         d = match['submission_date']
         print("%s\n" % format_datetime("Submission", match['submission_date']))
     else:
@@ -122,7 +122,7 @@ def main():
                 print("%s" % format_datetime("Day %d" % i, day))
             print('')
         else:
-            print("Due date present but could not extrace submission date...\n")
+            print("Due date present but could not extract submission date...\n")
 
     for f in match['match_results']:
         dest_path = path.join(args.destination, path.basename(f))

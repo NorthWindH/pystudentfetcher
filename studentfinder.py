@@ -214,7 +214,7 @@ class StudentFinder:
                         while True:
                             next_day = next_day + day_advance
                             if weekday_idx_to_letter(next_day.weekday()) in self.business_days and \
-                                not next_day in self.business_days:
+                                not next_day in self.holiday:
                                 break
                         if meets_deadline(submission_date, next_day):
                             break
